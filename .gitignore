@@ -5,8 +5,8 @@ config.yaml
 conversations.json
 
 # Local build artifacts
-server
-WarpLocal.app/
+/server
+/WarpLocal.app/
 bin/
 dist/
 
