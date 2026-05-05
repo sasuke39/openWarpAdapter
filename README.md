@@ -115,15 +115,27 @@ Health check:
 curl http://127.0.0.1:18888/health
 ```
 
-### 4. Point Warp to the Local Adapter
+### 4. Build the Patched Warp Client
 
-This repository does not ship an official Warp build. You need a locally patched Warp client that sends AI traffic to:
+This repository includes patch files to modify the Warp client. See **[WARP_CLIENT.md](./WARP_CLIENT.md)** for the complete build guide.
 
-```text
-http://127.0.0.1:18888/ai/multi-agent
+Quick summary:
+
+```bash
+# Apply all patches to the warp source tree
+for patch in patches/*.patch; do patch -p1 < "$patch"; done
+
+# Build
+cargo build --bin warp-oss -F skip_firebase_anonymous_user
 ```
 
-The helper script `build_and_bundle.sh` shows one way to bundle a local Warp build for macOS. It is an optional local workflow helper, not part of the adapter runtime.
+The patches handle:
+
+- **Server URL redirection** — points the client to `http://127.0.0.1:18888`
+- **Auth bypass** — skips Firebase authentication (the local adapter doesn't need it)
+- **CJK language detection** — fixes Chinese/Japanese/Korean input being treated as shell commands
+
+The helper script `build_and_bundle.sh` shows one way to bundle a local Warp build for macOS.
 
 ## Configuration
 

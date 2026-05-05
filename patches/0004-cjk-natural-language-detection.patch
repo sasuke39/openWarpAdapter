@@ -1,0 +1,43 @@
+diff --git a/crates/natural_language_detection/src/lib.rs b/crates/natural_language_detection/src/lib.rs
+--- a/crates/natural_language_detection/src/lib.rs
++++ b/crates/natural_language_detection/src/lib.rs
+@@ -33,6 +33,25 @@ pub fn is_word(word: &str, db: WordDb) -> bool {
+     }
+ }
+
++/// Return true if the token contains characters from non-Latin writing systems
++/// (CJK, Cyrillic, Arabic, etc.). Shell commands are virtually always ASCII.
++fn contains_non_latin_script(s: &str) -> bool {
++    s.chars().any(|c| {
++        matches!(
++            c,
++            '\u{4E00}'..='\u{9FFF}'   // CJK Unified Ideographs
++                | '\u{3400}'..='\u{4DBF}' // CJK Extension A
++                | '\u{F900}'..='\u{FAFF}' // CJK Compatibility Ideographs
++                | '\u{3040}'..='\u{309F}' // Hiragana
++                | '\u{30A0}'..='\u{30FF}' // Katakana
++                | '\u{AC00}'..='\u{D7AF}' // Hangul Syllables
++                | '\u{0400}'..='\u{04FF}' // Cyrillic
++                | '\u{0600}'..='\u{06FF}' // Arabic
++                | '\u{3000}'..='\u{303F}' // CJK Symbols/Punctuation
++                | '\u{FF00}'..='\u{FFEF}' // Fullwidth forms
++        )
++    })
++}
++
+ /// Calculate the NL score for a vector of words:
+ /// It consists two components: # of natural language tokens and # of tokens with shell syntax.
+ /// The total score is calculated by (# of natural language tokens - # of tokens with shell syntax).max(0)
+@@ -44,6 +63,13 @@ pub fn natural_language_words_score(words: Vec<Cow<str>>, is_first_token_command
+     for (i, token) in words.into_iter().enumerate() {
+         let token = token_preprocessing(&token);
+
++        // Non-Latin script tokens are natural language, not shell commands.
++        if contains_non_latin_script(&token) {
++            natural_language_token_count += 1;
++            continue;
++        }
++
+         if i == 0
+             && (is_word(&token, WordDb::Command)
+                 || (is_first_token_command && !RESERVED_KEYWORDS.contains(&token.as_str())))

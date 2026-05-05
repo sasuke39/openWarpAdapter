@@ -1,0 +1,21 @@
+diff --git a/app/src/server/server_api.rs b/app/src/server/server_api.rs
+--- a/app/src/server/server_api.rs
++++ b/app/src/server/server_api.rs
+@@ -1096,8 +1096,13 @@ impl WarpServerApi {
+         request: &warp_multi_agent_api::Request,
+     ) -> std::result::Result<AIOutputStream<warp_multi_agent_api::ResponseEvent>, Arc<AIApiError>>
+     {
+-        let auth_token = self.get_or_refresh_access_token()
+-            .await
+-            .map_err(Into::into)
+-            .map_err(Arc::new)?;
++        // Local channel does not require Firebase authentication —
++        // the local adapter handles requests without auth.
++        let auth_token = if ChannelState::channel() == Channel::Local {
++            AuthToken::NoAuth
++        } else {
++            self.get_or_refresh_access_token()
++                .await
++                .map_err(Into::into)
++                .map_err(Arc::new)?
++        };

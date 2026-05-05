@@ -115,15 +115,27 @@ go run ./cmd/server
 curl http://127.0.0.1:18888/health
 ```
 
-### 4. 让 Warp 指向本地适配器
+### 4. 构建对接本地适配器的 Warp 客户端
 
-本仓库不提供 Warp 官方构建。你需要一个本地修改过的 Warp 客户端，将其 AI 流量发送到：
+本仓库包含 Warp 客户端补丁文件。完整构建指南见 **[WARP_CLIENT.md](./WARP_CLIENT.md)**。
 
-```text
-http://127.0.0.1:18888/ai/multi-agent
+快速步骤：
+
+```bash
+# 对 warp 源码目录打全部补丁
+for patch in patches/*.patch; do patch -p1 < "$patch"; done
+
+# 编译
+cargo build --bin warp-oss -F skip_firebase_anonymous_user
 ```
 
-辅助脚本 `build_and_bundle.sh` 展示了在 macOS 上打包本地 Warp 构建的一种方式。它是可选的本地工作流辅助工具，不属于适配器运行时的一部分。
+补丁涵盖：
+
+- **服务端 URL 重定向** — 将客户端指向 `http://127.0.0.1:18888`
+- **认证跳过** — 绕过 Firebase 认证（本地适配器不需要）
+- **中文输入识别** — 修复中文/日文/韩文输入被当成 shell 命令的问题
+
+辅助脚本 `build_and_bundle.sh` 展示了在 macOS 上打包本地 Warp 构建的一种方式。
 
 ## 配置说明
 

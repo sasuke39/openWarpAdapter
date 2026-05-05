@@ -1,0 +1,17 @@
+diff --git a/app/src/bin/oss.rs b/app/src/bin/oss.rs
+--- a/app/src/bin/oss.rs
++++ b/app/src/bin/oss.rs
+@@ -11,11 +11,11 @@ use warp_core::{
+ // Simple wrapper around warp::run() for Warp OSS builds.
+ fn main() -> Result<()> {
+     let mut state = ChannelState::new(
+-        Channel::Oss,
++        Channel::Local,
+         ChannelConfig {
+             app_id: AppId::new("dev", "warp", "WarpLocal"),
+             logfile_name: "warp-local.log".into(),
+-            server_config: WarpServerConfig::production(),
++            server_config: WarpServerConfig::local_adapter(),
+             oz_config: OzConfig::production(),
+             telemetry_config: None,
+             crash_reporting_config: None,
