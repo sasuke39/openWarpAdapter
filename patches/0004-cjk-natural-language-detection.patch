@@ -7,7 +7,7 @@ diff --git a/crates/natural_language_detection/src/lib.rs b/crates/natural_langu
 
 +/// Return true if the token contains characters from non-Latin writing systems
 +/// (CJK, Cyrillic, Arabic, etc.). Shell commands are virtually always ASCII.
-+fn contains_non_latin_script(s: &str) -> bool {
++pub fn contains_non_latin_script(s: &str) -> bool {
 +    s.chars().any(|c| {
 +        matches!(
 +            c,
@@ -41,3 +41,39 @@ diff --git a/crates/natural_language_detection/src/lib.rs b/crates/natural_langu
          if i == 0
              && (is_word(&token, WordDb::Command)
                  || (is_first_token_command && !RESERVED_KEYWORDS.contains(&token.as_str())))
+diff --git a/crates/input_classifier/src/heuristic_classifier/mod.rs b/crates/input_classifier/src/heuristic_classifier/mod.rs
+--- a/crates/input_classifier/src/heuristic_classifier/mod.rs
++++ b/crates/input_classifier/src/heuristic_classifier/mod.rs
+@@ -5,7 +5,7 @@ use async_trait::async_trait;
+ use itertools::Itertools as _;
+-use natural_language_detection::natural_language_words_score;
++use natural_language_detection::{contains_non_latin_script, natural_language_words_score};
+ use warp_completer::ParsedTokensSnapshot;
+
+ use crate::{
+@@ -43,6 +43,12 @@ impl InputClassifier for HeuristicClassifier {
+         let word_tokens = parse_query_into_tokens(input.buffer_text.as_str());
+         let total_word_token_count = word_tokens.len();
+
++        // Non-Latin scripts (CJK, Arabic, Cyrillic, etc.) are natural language,
++        // not shell commands.
++        if contains_non_latin_script(input.buffer_text.as_str()) {
++            return InputType::AI;
++        }
++
+         if total_word_token_count == 1
+             && is_one_off_natural_language_word_or_prefix(&word_tokens[0].to_lowercase())
+         {
+@@ -99,6 +105,13 @@ async fn natural_language_detection_heuristic(
+     current_input_type: InputType,
+     include_last_token: bool,
+ ) -> ClassificationResult {
++    // Non-Latin scripts (CJK, Arabic, Cyrillic, etc.) are natural language,
++    // not shell commands — regardless of token count.
++    if contains_non_latin_script(input.buffer_text.as_str()) {
++        return ClassificationResult::pure_ai();
++    }
++
+     let word_tokens_count = word_tokens.len();
+
+     let min_token_length = if matches!(current_input_type, InputType::AI) {
