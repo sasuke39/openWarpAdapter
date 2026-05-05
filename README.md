@@ -178,6 +178,10 @@ Near-term priorities:
 3. add `ask_user_question` as a late-MVP capability
 4. keep reducing accidental reliance on unsupported Warp backend features
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=sasuke39/openWarpAdapter&type=Date)](https://star-history.com/#sasuke39/openWarpAdapter&Date)
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).
