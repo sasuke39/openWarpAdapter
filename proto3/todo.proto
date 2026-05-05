@@ -1,0 +1,32 @@
+// TODO list types and operations for the multi-agent API.
+syntax = "proto3";
+
+package warp.multi_agent.v1;
+
+
+
+// A single TODO item.
+message TodoItem {
+  // Unique identifier for the TODO item.
+  string id = 1;
+
+  // The title/summary of the TODO item.
+  string title = 2;
+
+  // Detailed description of the TODO item.
+  string description = 3;
+}
+
+// Tool call to create a new TODO list.
+message CreateTodoList {
+  // Initial TODO items for the new list (optional).
+  repeated TodoItem initial_todos = 1;
+}
+
+message UpdatePendingTodos {
+   repeated TodoItem updated_pending_todos = 1;
+}
+
+message MarkTodosCompleted {
+   repeated string todo_ids = 1;
+}

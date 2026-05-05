@@ -1,0 +1,15 @@
+.DS_Store
+
+# Local runtime config/state
+config.yaml
+conversations.json
+
+# Local build artifacts
+server
+WarpLocal.app/
+bin/
+dist/
+
+# Go
+coverage.out
+
