@@ -318,6 +318,12 @@ func (s *Server) handleAgentRequest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[REQ] history now has %d messages, calling LLM", len(conv.history))
 
+		// Clean up any incomplete tool-call cycles in the history.
+		// This can happen if the server was restarted while waiting for
+		// tool results from the client.
+		conv.history = pruneIncompleteToolCalls(conv.history)
+
+
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
@@ -1390,6 +1396,34 @@ func (s *Server) sendEvent(w io.Writer, flusher http.Flusher, event *pb.Response
 	default:
 		log.Printf("[EVENT] unknown type=%T", event.Type)
 	}
+}
+
+// pruneIncompleteToolCalls removes trailing assistant tool-call messages
+// that don't have matching tool result messages following them. This can
+// happen if the server was restarted while waiting for tool results from
+// the client — DeepSeek and other strict APIs reject malformed histories.
+func pruneIncompleteToolCalls(history []openai.ChatCompletionMessageParamUnion) []openai.ChatCompletionMessageParamUnion {
+	if len(history) == 0 {
+		return history
+	}
+	// Walk backwards and remove leading assistant tool_calls that have no
+	// following tool messages.
+	for len(history) > 0 {
+		last := history[len(history)-1]
+		// Only assistant messages can have tool_calls.
+		if last.OfAssistant == nil {
+			break
+		}
+		// If the last message has tool_calls, it must be followed by tool
+		// messages — but it's the last message, so there are none.
+		if len(last.OfAssistant.ToolCalls) > 0 {
+			log.Printf("[HISTORY] pruning dangling assistant tool_calls message (%d tool calls)", len(last.OfAssistant.ToolCalls))
+			history = history[:len(history)-1]
+			continue
+		}
+		break
+	}
+	return history
 }
 
 var _ = json.RawMessage{}
