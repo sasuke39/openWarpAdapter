@@ -1494,6 +1494,13 @@ func (s *Server) runAgentLoop(ctx context.Context, w io.Writer, flusher http.Flu
 		var firstSent bool
 
 		for stream.Next() {
+			// Check for client disconnect. Without this, a dead connection
+			// stays in CLOSE_WAIT until the handler unwinds.
+			if ctx.Err() != nil {
+				log.Printf("[LLM] loop=%d client disconnected mid-stream, aborting", i)
+				return
+			}
+
 			chunk := stream.Current()
 			chunks = append(chunks, chunk)
 			chunkCount++
