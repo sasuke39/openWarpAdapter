@@ -1,99 +1,59 @@
-# Warp Local Adapter
+# WarpLocal
 
-A local, open-source, Warp-compatible coding agent adapter for OpenAI-compatible LLM providers.
+Run your own LLM inside Warp. A local, open-source adapter that connects a patched Warp terminal to any OpenAI-compatible provider — OpenAI, DeepSeek, Ollama, OpenRouter, and more.
 
-This project lets a patched Warp client talk to a local Go server instead of Warp's hosted AI backend. The local server accepts Warp's protobuf request format, calls an OpenAI-compatible model endpoint, and streams Warp-compatible SSE/protobuf events back to the client.
+**How it works:** WarpLocal patches the Warp client to route AI requests to a local Go server instead of Warp's cloud backend. The server translates Warp's protobuf protocol into OpenAI-compatible API calls and streams responses back.
 
-## Status
+## Features
 
-This repository is an MVP focused on the core coding loop:
+- Works with any OpenAI-compatible endpoint (OpenAI, DeepSeek, Ollama, OpenRouter, vLLM, LM Studio)
+- Drop-in WarpLocal.app — double-click to launch, no CLI needed
+- Web settings UI at `http://127.0.0.1:18888/settings`
+- CJK input support — Chinese/Japanese/Korean text is recognized as AI queries
+- Coexists with the official Warp app
 
-- read code
-- search code
-- run shell commands
-- wait for long-running shell commands
-- apply file diffs
-- return streamed assistant output
+## Supported Tools (MVP)
 
-It is not a full replacement for Warp's production backend.
+`read_files` · `grep` · `file_glob` · `file_glob_v2` · `run_shell_command` · `read_shell_command_output` · `transfer_shell_command_control_to_user` · `apply_file_diffs` · `search_codebase`
 
-## What Works
+Not yet supported: MCP tools, subagents, computer use, passive suggestions.
 
-Current MVP tool support:
+## Install
 
-- `read_files`
-- `grep`
-- `file_glob`
-- `file_glob_v2`
-- `run_shell_command`
-- `read_shell_command_output`
-- `transfer_shell_command_control_to_user`
-- `apply_file_diffs`
-- `search_codebase`
+### Option A: Download Release (Recommended)
 
-Current server behavior:
-
-- Warp-compatible `POST /ai/multi-agent`
-- protobuf request decoding
-- SSE + base64 + protobuf response events
-- conversation history persistence
-- long-running shell command tracking
-- unsupported tool rejection with explicit error text
-
-## What Does Not Yet Work
-
-Not in the current MVP:
-
-- MCP tools
-- subagents / multi-agent orchestration
-- computer use
-- document-specific tools
-- passive suggestions
-- full Warp server parity
-
-If the model asks for an unsupported tool, the local adapter now rejects it explicitly instead of forwarding a broken tool call to the client.
-
-## Repository Layout
-
-```text
-local-adapter/
-├── cmd/server/                 # HTTP entrypoint
-├── internal/agent/             # system prompt
-├── internal/config/            # config loading
-├── internal/llm/               # OpenAI-compatible LLM client
-├── internal/proto/             # generated Go protobuf files
-├── internal/tools/             # local tool implementations
-├── proto/                      # protocol source files used by this adapter
-├── proto3/                     # compatibility copies used during generation
-├── MVP.md                      # implementation notes and architecture history
-├── TODO.md                     # working backlog / notes
-├── WARP_CLIENT.md              # patch + build guide for WarpLocal
-├── assets/                     # tracked app icon assets
-└── build_and_bundle.sh         # macOS WarpLocal bundle builder
+```bash
+sh ./install.sh
 ```
+
+Downloads the latest `WarpLocal.app` from [GitHub Releases](https://github.com/sasuke39/openWarpAdapter/releases) and installs it.
+
+### Option B: Build from Source
+
+Prerequisites: Go 1.22+, Rust toolchain, [Warp source](https://github.com/nicohman/warp) (v0.2026.04.29)
+
+```bash
+# 1. Clone this repo
+git clone https://github.com/sasuke39/openWarpAdapter.git
+cd openWarpAdapter
+
+# 2. Build the WarpLocal app bundle
+WARP_SRC=/path/to/warp-source sh ./build_and_bundle.sh
+open ./WarpLocal.app
+```
+
+See **[WARP_CLIENT.md](./WARP_CLIENT.md)** for the full patch and build guide.
 
 ## Quick Start
 
-### 1. Prerequisites
+1. **Launch** `WarpLocal.app`
+2. **Open settings** — the app menu includes a "Local Adapter Settings..." item, or visit [http://127.0.0.1:18888/settings](http://127.0.0.1:18888/settings)
+3. **Configure** your provider, API key, and model
+4. **Start coding** — press `Cmd+K` in WarpLocal and talk to your LLM
 
-- Go 1.22 or newer
-- A patched Warp client that points to this local adapter
-- An OpenAI-compatible endpoint such as:
-  - OpenAI
-  - OpenRouter
-  - Ollama
-  - LM Studio
-  - vLLM
+## Configuration
 
-### 2. Configure
-
-Copy the example config:
-
-```bash
-cp config.example.yaml config.yaml
-```
-
-Then edit `config.yaml`:
+Runtime config is stored in `config.yaml` (or `~/Library/Application Support/WarpLocal/config.yaml` for bundled apps).
 
 ```yaml
 provider: openai-compatible
@@ -105,120 +65,66 @@ server:
   port: 18888
 ```
 
-### 3. Run the Adapter
+You can also configure everything through the web settings UI — no manual YAML editing required.
 
-```bash
-go run ./cmd/server
+## Repository Layout
+
+```text
+├── cmd/server/                 # Go HTTP server (local adapter)
+├── internal/agent/             # system prompt
+├── internal/config/            # config loading
+├── internal/llm/               # OpenAI-compatible LLM client
+├── internal/proto/             # generated Go protobuf files
+├── internal/tools/             # local tool implementations
+├── patches/                    # Warp client patches (5 files)
+├── assets/                     # app icon
+├── build_and_bundle.sh         # macOS WarpLocal.app builder
+├── install.sh                  # one-click installer
+├── WARP_CLIENT.md              # full patch + build guide
 ```
 
-Health check:
+## Warp Client Patches
 
-```bash
-curl http://127.0.0.1:18888/health
+The `patches/` directory contains 5 patches that modify the Warp client:
+
+| Patch | Purpose |
+|-------|---------|
+| 0001 | `WarpServerConfig::local_adapter()` — routes requests to `127.0.0.1:18888` |
+| 0002 | `Channel::Local` entrypoint — activates local adapter config |
+| 0003 | Skip Firebase auth — local adapter doesn't need cloud auth |
+| 0004 | CJK natural language detection — Chinese/Japanese/Korean input recognized as AI queries |
+| 0005 | "Local Adapter Settings..." menu item in Warp UI |
+
+See **[WARP_CLIENT.md](./WARP_CLIENT.md)** for details on each patch.
+
+## App Bundle Structure
+
+```
+WarpLocal.app/
+└── Contents/
+    ├── MacOS/warp                # WarpLocal main binary
+    ├── Helpers/warp-local-adapter # Go AI backend server
+    └── Resources/
+        ├── config.example.yaml
+        └── iconfile.icns
 ```
 
-### 4. Build the Patched Warp Client
-
-This repository includes patch files to modify the Warp client. See **[WARP_CLIENT.md](./WARP_CLIENT.md)** for the complete build guide.
-
-Quick summary:
-
-```bash
-# Apply all patches to the warp source tree
-for patch in patches/*.patch; do patch -p1 < "$patch"; done
-
-# Build
-cargo build --bin warp -F skip_firebase_anonymous_user
-```
-
-The patches handle:
-
-- **Server URL redirection** — points the client to `http://127.0.0.1:18888`
-- **Auth bypass** — skips Firebase authentication (the local adapter doesn't need it)
-- **CJK language detection** — fixes Chinese/Japanese/Korean input being treated as shell commands
-- **Local settings entrypoint** — exposes a Local Adapter entry in Warp settings / menus
-
-The helper script `build_and_bundle.sh` builds a production-ready `WarpLocal.app` bundle for macOS using:
-
-- `Contents/MacOS/warp` as the main app executable
-- `Contents/Helpers/warp-local-adapter` as the local backend helper
-- tracked icon assets from `assets/`
-
-### 5. Build a macOS App Bundle
-
-```bash
-sh ./build_and_bundle.sh
-open ./WarpLocal.app
-```
-
-### 6. Install from a Release
-
-```bash
-sh ./install.sh
-```
-
-## Configuration
-
-Runtime configuration is loaded from `config.yaml`.
-
-Fields:
-
-- `provider`: free-form label used by the local adapter
-- `base_url`: OpenAI-compatible API base URL
-- `api_key`: provider API key
-- `model`: model name
-- `server.host`: bind host
-- `server.port`: bind port
-
-Public repositories should not commit real `config.yaml` files. Use `config.example.yaml` as the template.
-
-## Protocol Compatibility and Origins
-
-This project keeps a minimal set of Warp-compatible protocol files so the local adapter can speak the request/response format expected by a patched Warp client.
-
-- `proto/` contains protocol sources used by this adapter workflow
-- `internal/proto/` contains generated Go bindings used at runtime
-
-These files are kept here for compatibility with the client protocol used by this project. This repository is not an official Warp backend mirror and does not claim to implement the full hosted service behavior.
+The Warp client manages the adapter server lifecycle — it starts the helper automatically and keeps it running.
 
 ## Development
 
-Format and test:
-
 ```bash
-gofmt -w ./cmd ./internal
 go test ./...
+gofmt -w ./cmd ./internal
 ```
-
-## Web Settings UI
-
-WarpLocal ships a local settings page at [http://127.0.0.1:18888/settings](http://127.0.0.1:18888/settings). It is meant to be a lightweight control panel for:
-
-- provider / base URL / API key / model setup
-- quick status checks
-- config reloads without restarting the app
-
-If this project helps, please give it a star on [GitHub](https://github.com/sasuke39/openWarpAdapter). That encouragement helps prioritize the next wave of tools and protocol coverage.
-
-## Open Source Notes
-
-This repository intentionally excludes:
-
-- local conversation state
-- personal config files
-- built binaries
-- local app bundles
-
-See `.gitignore` for the exact exclusions.
 
 ## Roadmap
 
-Near-term priorities:
-
-1. make `apply_file_diffs` failure reporting more structured
-2. improve long-running shell command behavior
-3. add `ask_user_question` as a late-MVP capability
-4. keep reducing accidental reliance on unsupported Warp backend features
+1. Native Warp settings page for Local Adapter (instead of web UI)
+2. `ask_user_question` tool support
+3. Better `apply_file_diffs` failure reporting
+4. Improved long-running shell command behavior
+5. CI-based release automation
 
 ## Star History
 
