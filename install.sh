@@ -37,7 +37,8 @@ install_prebuilt() {
             info "Downloaded latest release from GitHub"
             rm -rf "$INSTALL_DIR/WarpLocal.app"
             ditto -x -k "$tmp_zip" "$INSTALL_DIR"
-            info "Installed to $INSTALL_DIR/WarpLocal.app"
+            xattr -cr "$INSTALL_DIR/WarpLocal.app" 2>/dev/null || true
+            info "Installed to $INSTALL_DIR/WarpLocal.app (quarantine cleared)"
             return
         fi
         warn "Latest GitHub release is not available yet; falling back to local bundle detection"
@@ -47,7 +48,8 @@ install_prebuilt() {
         info "Found local WarpLocal.app bundle"
         rm -rf "$INSTALL_DIR/WarpLocal.app"
         cp -R "$SCRIPT_DIR/WarpLocal.app" "$INSTALL_DIR/WarpLocal.app"
-        info "Installed to $INSTALL_DIR/WarpLocal.app"
+        xattr -cr "$INSTALL_DIR/WarpLocal.app" 2>/dev/null || true
+        info "Installed to $INSTALL_DIR/WarpLocal.app (quarantine cleared)"
         return
     fi
     error "Pre-built WarpLocal.app not available yet. Use --build to compile from source."
@@ -118,7 +120,8 @@ install_build() {
     # Install
     if [[ -d "$SCRIPT_DIR/WarpLocal.app" ]]; then
         cp -R "$SCRIPT_DIR/WarpLocal.app" "$INSTALL_DIR/WarpLocal.app"
-        info "Installed to $INSTALL_DIR/WarpLocal.app"
+        xattr -cr "$INSTALL_DIR/WarpLocal.app" 2>/dev/null || true
+        info "Installed to $INSTALL_DIR/WarpLocal.app (quarantine cleared)"
     else
         error "Build failed — WarpLocal.app not found"
     fi
