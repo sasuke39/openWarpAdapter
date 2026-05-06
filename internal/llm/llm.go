@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -36,9 +37,12 @@ func NewClient(cfg *config.Config) *Client {
 	opts := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
 	}
-	if cfg.BaseURL != "" {
-		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
 	}
+	opts = append(opts, option.WithBaseURL(baseURL))
+	log.Printf("[LLM] NewClient: base_url=%s model=%s key_len=%d", baseURL, cfg.Model, len(cfg.APIKey))
 
 	client := openai.NewClient(opts...)
 
@@ -310,6 +314,7 @@ func (c *Client) StreamChat(ctx context.Context, systemPrompt string, history []
 	msgs = append(msgs, openai.SystemMessage(systemPrompt))
 	msgs = append(msgs, history...)
 
+	log.Printf("[LLM] StreamChat: model=%s msg_count=%d tools=%d", c.model, len(msgs), len(c.tools))
 	return c.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 		Model:    openai.ChatModel(c.model),
 		Messages: msgs,

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -48,7 +50,17 @@ type Server struct {
 	conversations   map[string]*Conversation
 	runningTasks    sync.Map // taskID → context.CancelFunc
 	cfg             *config.Config
+	configPath      string
 	persistencePath string
+	lastConfigError string
+}
+
+type settingsStatus struct {
+	OK            bool     `json:"ok"`
+	Name          string   `json:"name"`
+	Configured    bool     `json:"configured"`
+	MissingFields []string `json:"missing_fields,omitempty"`
+	Error         string   `json:"error,omitempty"`
 }
 
 const maxConversations = 30
@@ -68,7 +80,8 @@ var supportedMVPTools = map[string]struct{}{
 func NewServer(cfg *config.Config, configPath string) *Server {
 	server := &Server{
 		conversations:   make(map[string]*Conversation),
-		cfg:             cfg,
+		cfg:             config.ApplyDefaults(cfg),
+		configPath:      configPath,
 		persistencePath: filepath.Join(filepath.Dir(configPath), "conversations.json"),
 	}
 	if err := server.loadConversations(); err != nil {
@@ -116,19 +129,48 @@ func (s *Server) evictOldestLocked() {
 	}
 }
 
+func defaultConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err == nil {
+		return filepath.Join(home, "Library", "Application Support", "WarpLocal", "config.yaml")
+	}
+	return "config.yaml"
+}
+
 func main() {
-	configPath := "config.yaml"
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+	configPath := flag.String("config", "", "Path to config.yaml (default: ~/Library/Application Support/WarpLocal/config.yaml)")
+	flag.Parse()
+
+	resolvedConfigPath := *configPath
+	if resolvedConfigPath == "" {
+		resolvedConfigPath = defaultConfigPath()
 	}
 
-	server := NewServer(cfg, configPath)
+	// Set up file logging to ~/Library/Application Support/WarpLocal/warplocal.log
+	logDir := filepath.Dir(resolvedConfigPath)
+	if err := os.MkdirAll(logDir, 0o755); err == nil {
+		logPath := filepath.Join(logDir, "warplocal.log")
+		if logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+			log.SetOutput(io.MultiWriter(os.Stderr, logFile))
+			defer logFile.Close()
+		}
+	}
+	log.Printf("[SERVER] Starting warp-local-adapter, config=%s", resolvedConfigPath)
+
+	cfg, err := config.LoadOrDefault(resolvedConfigPath)
+	server := NewServer(cfg, resolvedConfigPath)
+	if err != nil {
+		server.lastConfigError = err.Error()
+		log.Printf("[SERVER] Config load warning: %v", err)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ai/multi-agent", server.handleAgentRequest)
 	mux.HandleFunc("/health", server.handleHealth)
 	mux.HandleFunc("/signup/remote", server.handleSignupRemote)
 	mux.HandleFunc("/login/remote", server.handleSignupRemote)
+	mux.HandleFunc("/settings", server.handleSettings)
+	mux.HandleFunc("/settings/status", server.handleSettingsStatus)
+	mux.HandleFunc("/settings/reload", server.handleSettingsReload)
 	mux.HandleFunc("POST /agent/tasks/{task_id}/cancel", server.handleCancelTask)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -157,8 +199,591 @@ func main() {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "ok")
+	_ = json.NewEncoder(w).Encode(s.currentStatus())
+}
+
+func (s *Server) currentStatus() settingsStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	status := settingsStatus{
+		OK:   true,
+		Name: "warp-local-adapter",
+	}
+	if s.cfg == nil {
+		status.Error = "config is not loaded"
+		return status
+	}
+	status.MissingFields = config.MissingRequiredFields(s.cfg)
+	status.Configured = len(status.MissingFields) == 0
+	if s.lastConfigError != "" {
+		status.Error = s.lastConfigError
+	}
+	return status
+}
+
+func (s *Server) isConfigured() bool {
+	return s.currentStatus().Configured
+}
+
+func (s *Server) reloadConfig() settingsStatus {
+	cfg, err := config.LoadOrDefault(s.configPath)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.cfg = config.ApplyDefaults(cfg)
+	if err != nil {
+		s.lastConfigError = err.Error()
+	} else {
+		s.lastConfigError = ""
+	}
+
+	for _, conv := range s.conversations {
+		conv.mu.Lock()
+		conv.client = llm.NewClient(s.cfg)
+		conv.history = nil
+		conv.LastRequestID = ""
+		conv.LastRunID = ""
+		conv.LastLongRunningCommandID = ""
+		conv.CreatedAt = time.Now().UTC()
+		conv.mu.Unlock()
+	}
+
+	status := settingsStatus{
+		OK:            true,
+		Name:          "warp-local-adapter",
+		MissingFields: config.MissingRequiredFields(s.cfg),
+	}
+	status.Configured = len(status.MissingFields) == 0
+	if s.lastConfigError != "" {
+		status.Error = s.lastConfigError
+	}
+	log.Printf("[SERVER] reloadConfig configured=%v missing=%v error=%q", status.Configured, status.MissingFields, status.Error)
+	return status
+}
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		s.renderSettingsHTML(w)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var newCfg config.Config
+		if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+			if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
+				http.Error(w, "invalid JSON", http.StatusBadRequest)
+				return
+			}
+		} else {
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "invalid form data", http.StatusBadRequest)
+				return
+			}
+			newCfg = config.Config{
+				Provider: r.FormValue("provider"),
+				BaseURL:  r.FormValue("base_url"),
+				APIKey:   r.FormValue("api_key"),
+				Model:    r.FormValue("model"),
+				Server: config.ServerConfig{
+					Host: r.FormValue("host"),
+				},
+			}
+			if port := r.FormValue("port"); port != "" {
+				fmt.Sscanf(port, "%d", &newCfg.Server.Port)
+			}
+		}
+		newCfg = *config.ApplyDefaults(&newCfg)
+		data, err := config.Dump(&newCfg)
+		if err != nil {
+			http.Error(w, "failed to serialize config", http.StatusInternalServerError)
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(s.configPath), 0o755); err != nil {
+			http.Error(w, "failed to create config directory", http.StatusInternalServerError)
+			return
+		}
+		if err := os.WriteFile(s.configPath, data, 0o644); err != nil {
+			http.Error(w, "failed to write config", http.StatusInternalServerError)
+			return
+		}
+		status := s.reloadConfig()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(status)
+		return
+	}
+
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+}
+
+func (s *Server) handleSettingsStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(s.currentStatus())
+}
+
+func (s *Server) handleSettingsReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(s.reloadConfig())
+}
+
+func (s *Server) renderSettingsHTML(w http.ResponseWriter) {
+	status := s.currentStatus()
+	s.mu.RLock()
+	cfg := *config.ApplyDefaults(s.cfg)
+	s.mu.RUnlock()
+	statusJSON, _ := json.Marshal(status)
+	warningHTML := func() string {
+		var parts []string
+		if status.Error != "" {
+			parts = append(parts, "<div class=\"warning-item\"><strong>Config warning</strong><span>"+html.EscapeString(status.Error)+"</span></div>")
+		}
+		if len(status.MissingFields) > 0 {
+			parts = append(parts, "<div class=\"warning-item\"><strong>Missing fields</strong><span>"+html.EscapeString(strings.Join(status.MissingFields, ", "))+"</span></div>")
+		}
+		return strings.Join(parts, "")
+	}()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WarpLocal Settings</title>
+<style>
+:root{
+  --bg:#0b1020;
+  --panel:#121a2d;
+  --panel-soft:rgba(255,255,255,0.03);
+  --border:rgba(148,163,184,0.18);
+  --text:#e5ecf6;
+  --muted:#95a3b8;
+  --good:#3ddc84;
+  --bad:#ff6b6b;
+  --accent-1:#8b5cf6;
+  --accent-2:#2563eb;
+}
+*{box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(139,92,246,0.2), transparent 28%%),
+    radial-gradient(circle at top right, rgba(37,99,235,0.16), transparent 26%%),
+    var(--bg);
+  color:var(--text);
+  margin:0;
+  min-height:100vh;
+}
+a{color:#b9cbff;text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 24px 48px}
+.hero{
+  display:flex;
+  justify-content:space-between;
+  gap:24px;
+  align-items:flex-start;
+  margin-bottom:24px;
+}
+.hero-copy{max-width:700px}
+.eyebrow{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid rgba(99,102,241,0.35);
+  background:rgba(99,102,241,0.12);
+  color:#cdd7ff;
+  border-radius:999px;
+  padding:7px 12px;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+}
+h1{font-size:40px;line-height:1.05;margin:14px 0 12px}
+.lead{color:var(--muted);font-size:18px;line-height:1.6;margin:0}
+.hero-meta{
+  display:grid;
+  gap:10px;
+  min-width:280px;
+}
+.meta-chip{
+  padding:14px 16px;
+  border-radius:16px;
+  border:1px solid var(--border);
+  background:rgba(15,23,42,0.78);
+}
+.meta-chip strong{display:block;font-size:13px;color:#c8d3e3;margin-bottom:4px}
+.meta-chip span{font-size:14px;color:var(--muted)}
+.layout{
+  display:grid;
+  grid-template-columns:minmax(0,1.3fr) minmax(300px,.9fr);
+  gap:20px;
+  align-items:start;
+}
+.card{
+  background:linear-gradient(180deg, rgba(18,26,45,0.96), rgba(12,18,32,0.98));
+  border:1px solid var(--border);
+  border-radius:24px;
+  padding:24px;
+  box-shadow:0 18px 48px rgba(0,0,0,.24);
+}
+.section-title{font-size:22px;margin:0 0 8px}
+.section-copy{color:var(--muted);line-height:1.6;margin:0 0 18px}
+.status-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:9px 14px;
+  border-radius:999px;
+  border:1px solid rgba(61,220,132,.24);
+  background:rgba(61,220,132,.1);
+  font-weight:700;
+  font-size:13px;
+}
+.status-badge.bad{
+  border-color:rgba(255,107,107,.24);
+  background:rgba(255,107,107,.1);
+}
+.status-grid{display:grid;gap:14px;margin-top:18px}
+.status-panel{
+  border-radius:18px;
+  border:1px solid var(--border);
+  background:var(--panel-soft);
+  padding:16px;
+}
+.status-panel strong{display:block;font-size:15px;margin-bottom:6px}
+.status-panel p{margin:0;color:var(--muted);line-height:1.5}
+.status-list{display:grid;gap:10px;margin-top:12px}
+.warning-item{
+  display:grid;
+  gap:4px;
+  padding:12px 14px;
+  border-radius:14px;
+  border:1px solid rgba(255,107,107,.18);
+  background:rgba(255,107,107,.08);
+}
+.warning-item strong{font-size:13px;color:#ffd0d0}
+.warning-item span{font-size:13px;color:#ffc1c1}
+label{display:block;margin:18px 0 8px;font-weight:600;color:#dbe6f4}
+input,select{
+  width:100%%;
+  padding:14px 15px;
+  border-radius:14px;
+  border:1px solid rgba(148,163,184,0.22);
+  background:#0d1527;
+  color:var(--text);
+  font-size:15px;
+  outline:none;
+}
+input:focus,select:focus{
+  border-color:rgba(96,165,250,0.9);
+  box-shadow:0 0 0 3px rgba(59,130,246,0.18);
+}
+.field-help{font-size:13px;color:var(--muted);margin-top:7px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.password-row{position:relative}
+.toggle-secret{
+  position:absolute;
+  right:12px;
+  top:50%%;
+  transform:translateY(-50%%);
+  border:none;
+  border-radius:10px;
+  padding:8px 10px;
+  background:#162036;
+  color:#cbd5e1;
+  cursor:pointer;
+}
+.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+button{
+  border:none;
+  border-radius:14px;
+  padding:13px 18px;
+  font-weight:700;
+  font-size:14px;
+  cursor:pointer;
+}
+.primary{background:linear-gradient(135deg,var(--accent-1),var(--accent-2));color:white}
+.secondary{background:#1b2437;color:#e6edf3;border:1px solid rgba(148,163,184,0.18)}
+.ghost{background:transparent;border:1px solid rgba(148,163,184,0.18);color:#d7dfeb}
+.hint{
+  font-size:13px;
+  color:var(--muted);
+  line-height:1.6;
+  margin:18px 0 0;
+}
+code{
+  background:#0b1222;
+  padding:2px 6px;
+  border-radius:8px;
+  color:#dbe6ff;
+}
+.endpoint-list{display:grid;gap:10px}
+.endpoint-item{
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:16px;
+  background:rgba(255,255,255,0.02);
+}
+.endpoint-item strong{display:block;font-size:14px;margin-bottom:6px}
+.endpoint-item span{color:var(--muted);font-size:13px;line-height:1.5}
+.save-note{
+  min-height:22px;
+  margin-top:12px;
+  font-size:13px;
+  color:#a5b4fc;
+}
+.footer{
+  margin-top:22px;
+  padding-top:18px;
+  border-top:1px solid rgba(148,163,184,0.16);
+  color:var(--muted);
+  font-size:14px;
+  line-height:1.7;
+}
+@media (max-width: 900px){
+  .hero,.layout{grid-template-columns:1fr;display:grid}
+  .hero{align-items:start}
+}
+@media (max-width: 640px){
+  .wrap{padding:24px 16px 40px}
+  h1{font-size:32px}
+  .row{grid-template-columns:1fr}
+  .actions button{width:100%%}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">WarpLocal Control Center</div>
+      <h1>Run Warp against your own LLM stack.</h1>
+      <p class="lead">Configure your provider, check adapter health, and hot-reload the local backend without leaving WarpLocal.</p>
+    </div>
+    <div class="hero-meta">
+      <div class="meta-chip">
+        <strong>Config file</strong>
+        <span><code>%s</code></span>
+      </div>
+      <div class="meta-chip">
+        <strong>Project</strong>
+        <span><a href="https://github.com/sasuke39/openWarpAdapter" target="_blank" rel="noreferrer">sasuke39/openWarpAdapter</a></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="layout">
+    <form id="settings-form" class="card" method="post" action="/settings">
+      <h2 class="section-title">Connection Settings</h2>
+      <p class="section-copy">These values are stored locally and used by the helper service inside <code>WarpLocal.app</code>.</p>
+
+      <label>Provider</label>
+      <select name="provider" id="provider">
+        %s
+      </select>
+      <div class="field-help">Pick a preset to prefill the most common base URL and model pair.</div>
+
+      <label>Base URL</label>
+      <input type="url" name="base_url" id="base_url" value="%s" placeholder="https://api.openai.com/v1">
+
+      <label>API Key</label>
+      <div class="password-row">
+        <input type="password" name="api_key" id="api_key" value="%s" placeholder="sk-...">
+        <button class="toggle-secret" type="button" id="toggle-secret">Show</button>
+      </div>
+
+      <label>Model</label>
+      <input type="text" name="model" id="model" value="%s" placeholder="gpt-4.1-mini">
+
+      <div class="row">
+        <div>
+          <label>Host</label>
+          <input type="text" name="host" value="%s" placeholder="127.0.0.1">
+        </div>
+        <div>
+          <label>Port</label>
+          <input type="number" name="port" value="%d" placeholder="18888">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" type="submit">Save & Reload</button>
+        <button class="secondary" type="button" id="refresh-status">Refresh Status</button>
+        <button class="ghost" type="button" id="open-health">Open Health JSON</button>
+      </div>
+      <div class="save-note" id="save-note"></div>
+      <p class="hint">Saving writes <code>config.yaml</code> and triggers <code>POST /settings/reload</code> so the running helper picks up the new provider immediately.</p>
+    </form>
+
+    <aside class="card">
+      <h2 class="section-title">Adapter Status</h2>
+      <p class="section-copy">A quick read on whether WarpLocal is ready to accept agent requests.</p>
+      <div id="status-badge" class="status-badge">Checking configuration…</div>
+      <div class="status-grid">
+        <div class="status-panel">
+          <strong id="status-title">Waiting for status</strong>
+          <p id="status-copy">Refresh the adapter state after editing settings or switching providers.</p>
+        </div>
+        <div class="status-panel">
+          <strong>Useful endpoints</strong>
+          <div class="endpoint-list">
+            <div class="endpoint-item">
+              <strong><code>GET /health</code></strong>
+              <span>Basic liveliness check for scripts, packaging smoke tests, and release verification.</span>
+            </div>
+            <div class="endpoint-item">
+              <strong><code>GET /settings/status</code></strong>
+              <span>Returns the currently loaded configuration state and any missing required fields.</span>
+            </div>
+          </div>
+        </div>
+        <div id="status-issues" class="status-list">%s</div>
+      </div>
+      <div class="footer">
+        If WarpLocal is helpful, please <a href="https://github.com/sasuke39/openWarpAdapter" target="_blank" rel="noreferrer">star the project on GitHub</a>. That little nudge helps us keep polishing the settings experience and add more tools beyond the current coding MVP.
+      </div>
+    </aside>
+  </section>
+</div>
+<script>
+const initialStatus = %s;
+const presets = {
+  "OpenAI": { base_url: "https://api.openai.com/v1", model: "gpt-4.1-mini" },
+  "DeepSeek": { base_url: "https://api.deepseek.com", model: "deepseek-chat" },
+  "Ollama": { base_url: "http://localhost:11434/v1", model: "llama3" },
+  "Custom": { base_url: "", model: "" }
+};
+document.getElementById("provider").addEventListener("change", (e) => {
+  const preset = presets[e.target.value];
+  if (preset) {
+    document.getElementById("base_url").value = preset.base_url;
+    document.getElementById("model").value = preset.model;
+  }
+});
+
+function renderStatus(data) {
+  const badge = document.getElementById("status-badge");
+  const title = document.getElementById("status-title");
+  const copy = document.getElementById("status-copy");
+  const issues = document.getElementById("status-issues");
+
+  badge.textContent = data.configured ? "Configured and ready" : "Needs attention";
+  badge.className = "status-badge" + (data.configured ? "" : " bad");
+
+  if (data.configured) {
+    title.textContent = "Local adapter is ready";
+    copy.textContent = "WarpLocal should be able to start agent conversations with the provider configured on this page.";
+  } else {
+    title.textContent = "Configuration is incomplete";
+    copy.textContent = "Fill the missing fields below, save, and WarpLocal will reload the helper without a full restart.";
+  }
+
+  const issueBlocks = [];
+  if (data.error) {
+    issueBlocks.push('<div class="warning-item"><strong>Config warning</strong><span>' + escapeHtml(data.error) + '</span></div>');
+  }
+  if (data.missing_fields && data.missing_fields.length) {
+    issueBlocks.push('<div class="warning-item"><strong>Missing fields</strong><span>' + escapeHtml(data.missing_fields.join(", ")) + '</span></div>');
+  }
+  issues.innerHTML = issueBlocks.join("");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function fetchStatus() {
+  const resp = await fetch("/settings/status");
+  const data = await resp.json();
+  renderStatus(data);
+}
+
+document.getElementById("refresh-status").addEventListener("click", async () => {
+  await fetchStatus();
+  document.getElementById("save-note").textContent = "Status refreshed from /settings/status.";
+});
+
+document.getElementById("open-health").addEventListener("click", () => {
+  window.open("/health", "_blank");
+});
+
+document.getElementById("toggle-secret").addEventListener("click", () => {
+  const field = document.getElementById("api_key");
+  const isPassword = field.type === "password";
+  field.type = isPassword ? "text" : "password";
+  document.getElementById("toggle-secret").textContent = isPassword ? "Hide" : "Show";
+});
+
+document.getElementById("settings-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = new URLSearchParams(new FormData(form));
+  const resp = await fetch("/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: payload.toString()
+  });
+  const data = await resp.json();
+  renderStatus(data);
+  document.getElementById("save-note").textContent = data.configured
+    ? "Saved. The local adapter reloaded successfully."
+    : "Saved, but the adapter still needs a few required fields.";
+});
+
+renderStatus(initialStatus);
+if (!initialStatus.configured) {
+  document.getElementById("save-note").textContent = "Add your provider settings, then save to activate the local adapter.";
+}
+</script>
+</body>
+</html>`,
+		html.EscapeString(s.configPath),
+		renderProviderOptions(cfg.Provider),
+		html.EscapeString(cfg.BaseURL),
+		html.EscapeString(cfg.APIKey),
+		html.EscapeString(cfg.Model),
+		html.EscapeString(cfg.Server.Host),
+		cfg.Server.Port,
+		warningHTML,
+		string(statusJSON),
+	)
+}
+
+func renderProviderOptions(selected string) string {
+	providers := []string{"OpenAI", "DeepSeek", "Ollama", "Custom"}
+	var b strings.Builder
+	for _, provider := range providers {
+		if provider == selected {
+			fmt.Fprintf(&b, `<option selected value="%s">%s</option>`, provider, provider)
+		} else {
+			fmt.Fprintf(&b, `<option value="%s">%s</option>`, provider, provider)
+		}
+	}
+	return b.String()
 }
 
 func (s *Server) handleSignupRemote(w http.ResponseWriter, r *http.Request) {
@@ -258,6 +883,21 @@ func (s *Server) handleAgentRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.isConfigured() {
+		log.Printf("[REQ] Local adapter is not configured")
+		s.sendEvent(w, flusher, &pb.ResponseEvent{
+			Type: &pb.ResponseEvent_Init{
+				Init: &pb.ResponseEvent_StreamInit{
+					ConversationId: convID,
+					RequestId:      uuid.New().String(),
+					RunId:          uuid.New().String(),
+				},
+			},
+		})
+		s.sendFinishError(w, flusher, "Local Adapter is not configured. Open Settings → Local Adapter to configure your LLM provider.")
+		return
+	}
+
 	conv.mu.Lock()
 	if conv.CreatedAt.IsZero() {
 		conv.CreatedAt = time.Now().UTC()
@@ -318,11 +958,10 @@ func (s *Server) handleAgentRequest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[REQ] history now has %d messages, calling LLM", len(conv.history))
 
-		// Clean up any incomplete tool-call cycles in the history.
-		// This can happen if the server was restarted while waiting for
-		// tool results from the client.
-		conv.history = pruneIncompleteToolCalls(conv.history)
-
+	// Clean up any incomplete tool-call cycles in the history.
+	// This can happen if the server was restarted while waiting for
+	// tool results from the client.
+	conv.history = pruneIncompleteToolCalls(conv.history)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

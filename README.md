@@ -67,7 +67,9 @@ local-adapter/
 ├── proto3/                     # compatibility copies used during generation
 ├── MVP.md                      # implementation notes and architecture history
 ├── TODO.md                     # working backlog / notes
-└── build_and_bundle.sh         # optional macOS WarpLocal bundle helper
+├── WARP_CLIENT.md              # patch + build guide for WarpLocal
+├── assets/                     # tracked app icon assets
+└── build_and_bundle.sh         # macOS WarpLocal bundle builder
 ```
 
 ## Quick Start
@@ -126,7 +128,7 @@ Quick summary:
 for patch in patches/*.patch; do patch -p1 < "$patch"; done
 
 # Build
-cargo build --bin warp-oss -F skip_firebase_anonymous_user
+cargo build --bin warp -F skip_firebase_anonymous_user
 ```
 
 The patches handle:
@@ -134,8 +136,26 @@ The patches handle:
 - **Server URL redirection** — points the client to `http://127.0.0.1:18888`
 - **Auth bypass** — skips Firebase authentication (the local adapter doesn't need it)
 - **CJK language detection** — fixes Chinese/Japanese/Korean input being treated as shell commands
+- **Local settings entrypoint** — exposes a Local Adapter entry in Warp settings / menus
 
-The helper script `build_and_bundle.sh` shows one way to bundle a local Warp build for macOS.
+The helper script `build_and_bundle.sh` builds a production-ready `WarpLocal.app` bundle for macOS using:
+
+- `Contents/MacOS/warp` as the main app executable
+- `Contents/Helpers/warp-local-adapter` as the local backend helper
+- tracked icon assets from `assets/`
+
+### 5. Build a macOS App Bundle
+
+```bash
+sh ./build_and_bundle.sh
+open ./WarpLocal.app
+```
+
+### 6. Install from a Release
+
+```bash
+sh ./install.sh
+```
 
 ## Configuration
 
@@ -169,6 +189,16 @@ Format and test:
 gofmt -w ./cmd ./internal
 go test ./...
 ```
+
+## Web Settings UI
+
+WarpLocal ships a local settings page at [http://127.0.0.1:18888/settings](http://127.0.0.1:18888/settings). It is meant to be a lightweight control panel for:
+
+- provider / base URL / API key / model setup
+- quick status checks
+- config reloads without restarting the app
+
+If this project helps, please give it a star on [GitHub](https://github.com/sasuke39/openWarpAdapter). That encouragement helps prioritize the next wave of tools and protocol coverage.
 
 ## Open Source Notes
 

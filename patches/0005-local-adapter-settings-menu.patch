@@ -1,0 +1,31 @@
+diff --git a/app/src/app_menus.rs b/app/src/app_menus.rs
+--- a/app/src/app_menus.rs
++++ b/app/src/app_menus.rs
+@@ -2,6 +2,7 @@
+ use std::fs::File;
+ use std::path::PathBuf;
+
++use warp_core::channel::{Channel, ChannelState};
+ use crate::ai::persisted_workspace::PersistedWorkspace;
+ use crate::auth::AuthStateProvider;
+ use crate::default_terminal::DefaultTerminal;
+@@ -540,6 +541,19 @@
+             CustomAction::OpenMCPServerCollection,
+             ctx,
+         ));
++    }
++
++    // Local adapter settings — only for local channel builds
++    if ChannelState::channel() == Channel::Local {
++        items.push(MenuItem::Separator);
++        items.push(MenuItem::Custom(CustomMenuItem::new(
++            "Local Adapter Settings...",
++            move |_ctx| {
++                let _ = std::process::Command::new("open").arg("http://127.0.0.1:18888/settings").spawn();
++            },
++            no_updates,
++            None,
++        )));
+     }
+
+     Menu::new("AI", items)

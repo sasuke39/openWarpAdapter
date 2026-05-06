@@ -1,6 +1,6 @@
 # 构建对接本地适配器的 Warp 客户端
 
-GitHub 仓库只包含 **服务端适配器**（`local-adapter`）。要让 Warp 客户端对接本地适配器，需要对 Warp 源码打 4 个补丁并重新编译。
+GitHub 仓库只包含 **本地适配器与补丁**（`local-adapter`）。要让 Warp 客户端对接本地适配器，需要对 Warp 源码打 5 个补丁并重新编译。
 
 ## 前置条件
 
@@ -10,7 +10,7 @@ GitHub 仓库只包含 **服务端适配器**（`local-adapter`）。要让 Warp
 
 ## 补丁列表
 
-`patches/` 目录下 4 个补丁，按顺序打：
+`patches/` 目录下 5 个补丁，按顺序打：
 
 | 序号 | 文件 | 作用 |
 |------|------|------|
@@ -18,6 +18,7 @@ GitHub 仓库只包含 **服务端适配器**（`local-adapter`）。要让 Warp
 | 0002 | `app/src/bin/oss.rs` | 入口改用 `Channel::Local` + `local_adapter()` |
 | 0003 | `app/src/server/server_api.rs` | 本地模式下跳过 Firebase 认证 |
 | 0004 | `crates/natural_language_detection/src/lib.rs` | 中文等非拉丁文字识别为自然语言（修复中文输入被当成 shell 命令的问题） |
+| 0005 | `app/src/app_menus.rs` 等 | 暴露 Local Adapter 设置入口 |
 
 ## 打补丁 + 编译
 
@@ -31,10 +32,10 @@ for patch in ../local-adapter/patches/*.patch; do
 done
 
 # 3. 编译
-cargo build --bin warp-oss -F skip_firebase_anonymous_user
+cargo build --bin warp -F skip_firebase_anonymous_user
 
 # 4. 产物位置
-ls -lh target/debug/warp-oss
+ls -lh target/debug/warp
 ```
 
 ## 补丁说明
@@ -59,6 +60,10 @@ Warp 的输入分类器（`input_classifier` crate）用英文词表判断输入
 
 这个补丁在 `natural_language_words_score()` 中增加非拉丁文字检测：CJK（中日韩）、西里尔、阿拉伯文等字符直接识别为自然语言 token。
 
+### 0005 — Local Adapter 设置入口
+
+在 WarpLocal 的 AI 菜单 / 设置里增加 Local Adapter 入口，直接打开本地设置页，方便修改 provider、模型和 API key。
+
 ## 本地适配器启动
 
 ```bash
@@ -67,4 +72,12 @@ cp config.example.yaml config.yaml   # 填入你的 API key 和模型
 go run ./cmd/server                  # 启动在 127.0.0.1:18888
 ```
 
-然后运行编译好的 `warp-oss`，Cmd+K 即可与本地 LLM 对话。
+然后运行编译好的 `warp`，或者直接执行：
+
+```bash
+cd local-adapter
+sh ./build_and_bundle.sh
+open ./WarpLocal.app
+```
+
+之后在 WarpLocal 里用 Cmd+K 即可与本地 LLM 对话。

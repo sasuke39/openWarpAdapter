@@ -67,7 +67,9 @@ local-adapter/
 ├── proto3/                     # 生成时使用的兼容副本
 ├── MVP.md                      # 实现说明与架构历史
 ├── TODO.md                     # 待办事项
-└── build_and_bundle.sh         # 可选的 macOS WarpLocal 打包脚本
+├── WARP_CLIENT.md              # WarpLocal 客户端补丁与构建指南
+├── assets/                     # 项目跟踪的应用图标资源
+└── build_and_bundle.sh         # macOS WarpLocal 打包脚本
 ```
 
 ## 快速开始
@@ -126,7 +128,7 @@ curl http://127.0.0.1:18888/health
 for patch in patches/*.patch; do patch -p1 < "$patch"; done
 
 # 编译
-cargo build --bin warp-oss -F skip_firebase_anonymous_user
+cargo build --bin warp -F skip_firebase_anonymous_user
 ```
 
 补丁涵盖：
@@ -134,8 +136,26 @@ cargo build --bin warp-oss -F skip_firebase_anonymous_user
 - **服务端 URL 重定向** — 将客户端指向 `http://127.0.0.1:18888`
 - **认证跳过** — 绕过 Firebase 认证（本地适配器不需要）
 - **中文输入识别** — 修复中文/日文/韩文输入被当成 shell 命令的问题
+- **本地设置入口** — 在 WarpLocal 里暴露 Local Adapter 设置入口
 
-辅助脚本 `build_and_bundle.sh` 展示了在 macOS 上打包本地 Warp 构建的一种方式。
+辅助脚本 `build_and_bundle.sh` 会构建可直接运行的 `WarpLocal.app`：
+
+- `Contents/MacOS/warp` 作为主应用入口
+- `Contents/Helpers/warp-local-adapter` 作为本地 AI helper
+- `assets/` 中跟踪的图标资源
+
+### 5. 构建 macOS App
+
+```bash
+sh ./build_and_bundle.sh
+open ./WarpLocal.app
+```
+
+### 6. 从 Release 安装
+
+```bash
+sh ./install.sh
+```
 
 ## 配置说明
 
@@ -169,6 +189,18 @@ cargo build --bin warp-oss -F skip_firebase_anonymous_user
 gofmt -w ./cmd ./internal
 go test ./...
 ```
+
+## 本地设置页
+
+WarpLocal 内置本地设置页：[http://127.0.0.1:18888/settings](http://127.0.0.1:18888/settings)。
+
+这个页面主要负责：
+
+- 配置 provider / base URL / API key / model
+- 查看当前状态
+- 保存配置并热重载
+
+如果这个项目对你有帮助，欢迎去 [GitHub](https://github.com/sasuke39/openWarpAdapter) 点个 Star，算是给我们继续补更多 tool 能力的一点鼓励。
 
 ## 开源说明
 

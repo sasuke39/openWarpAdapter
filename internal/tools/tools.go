@@ -14,8 +14,8 @@ import (
 func ReadFiles(args json.RawMessage) (string, error) {
 	var input struct {
 		Files []struct {
-			Name        string `json:"name"`
-			LineRanges  []struct {
+			Name       string `json:"name"`
+			LineRanges []struct {
 				Start int `json:"start"`
 				End   int `json:"end"`
 			} `json:"line_ranges,omitempty"`
