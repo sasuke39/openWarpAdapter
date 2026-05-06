@@ -28,6 +28,12 @@ sh ./install.sh
 
 Downloads the latest `WarpLocal.app` from [GitHub Releases](https://github.com/sasuke39/openWarpAdapter/releases) and installs it.
 
+> **macOS "已损坏" 提示？** 从浏览器直接下载的未签名 App 会被 Gatekeeper 拦截。运行以下命令清除隔离标记即可：
+> ```bash
+> xattr -cr /Applications/WarpLocal.app
+> ```
+> 用 `sh ./install.sh` 安装会自动处理，不会出现此问题。
+
 ### Option B: Build from Source
 
 Prerequisites: Go 1.22+, Rust toolchain, [Warp source](https://github.com/nicohman/warp) (v0.2026.04.29)
