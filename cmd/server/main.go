@@ -92,8 +92,8 @@ func NewServer(cfg *config.Config, configPath string) *Server {
 
 func (s *Server) getOrCreateConversation(id string) *Conversation {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if conv, ok := s.conversations[id]; ok {
+		s.mu.Unlock()
 		return conv
 	}
 	conv := &Conversation{
@@ -102,6 +102,11 @@ func (s *Server) getOrCreateConversation(id string) *Conversation {
 	}
 	s.conversations[id] = conv
 	s.evictOldestLocked()
+	s.mu.Unlock()
+
+	// Persist after releasing s.mu. saveConversations() takes s.mu.RLock(),
+	// so calling it while holding the write lock would deadlock on a brand-new
+	// conversation before the request can even emit StreamInit.
 	if err := s.saveConversations(); err != nil {
 		log.Printf("Failed to persist conversations after create: %v", err)
 	}
