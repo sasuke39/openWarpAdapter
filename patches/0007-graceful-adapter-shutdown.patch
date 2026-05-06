@@ -1,0 +1,35 @@
+diff -u a/app/src/bin/local.rs b/app/src/bin/local.rs
+--- a/app/src/bin/local.rs
++++ b/app/src/bin/local.rs
+@@ -21,8 +21,30 @@
+ impl Drop for LocalAdapterGuard {
+     fn drop(&mut self) {
+         if let Some(child) = &mut self.child {
++            // Send SIGTERM first so the Go server can flush conversations to disk.
++            // child.kill() sends SIGKILL which cannot be caught.
++            #[cfg(unix)]
++            unsafe {
++                libc::kill(child.id() as i32, libc::SIGTERM);
++            }
++            #[cfg(not(unix))]
+             let _ = child.kill();
+-            let _ = child.wait();
++
++            // Wait up to 5 seconds for graceful shutdown, then force-kill.
++            let deadline = std::time::Instant::now() + Duration::from_secs(5);
++            loop {
++                match child.try_wait() {
++                    Ok(Some(_)) => break,
++                    Ok(None) if std::time::Instant::now() < deadline => {
++                        std::thread::sleep(Duration::from_millis(100));
++                    }
++                    _ => {
++                        let _ = child.kill();
++                        let _ = child.wait();
++                        break;
++                    }
++                }
++            }
+         }
+     }
+ }

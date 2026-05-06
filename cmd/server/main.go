@@ -102,6 +102,9 @@ func (s *Server) getOrCreateConversation(id string) *Conversation {
 	}
 	s.conversations[id] = conv
 	s.evictOldestLocked()
+	if err := s.saveConversations(); err != nil {
+		log.Printf("Failed to persist conversations after create: %v", err)
+	}
 	return conv
 }
 
@@ -190,6 +193,17 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		httpServer.Shutdown(ctx)
+	}()
+
+	// Periodically persist conversations to guard against SIGKILL.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := server.saveConversations(); err != nil {
+				log.Printf("Failed to persist conversations (periodic): %v", err)
+			}
+		}
 	}()
 
 	log.Printf("Local adapter listening on %s", addr)

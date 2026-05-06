@@ -1,0 +1,14 @@
+diff -u a/app/src/auth/auth_state.rs b/app/src/auth/auth_state.rs
+--- a/app/src/auth/auth_state.rs
++++ b/app/src/auth/auth_state.rs
+@@ -285,6 +285,11 @@
+
+     /// Returns whether the user considered onboarded to Warp.
+     pub fn is_onboarded(&self) -> Option<bool> {
++        // Local-adapter builds always treat the user as onboarded,
++        // since the SessionCookie credentials are never persisted to keychain.
++        if FeatureFlag::SkipFirebaseAnonymousUser.is_enabled() {
++            return Some(true);
++        }
+         self.user.read().as_ref().map(|user| user.is_onboarded)
+     }
