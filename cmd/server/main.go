@@ -65,7 +65,7 @@ type settingsStatus struct {
 
 const maxConversations = 30
 
-var supportedMVPTools = map[string]struct{}{
+var supportedTools = map[string]struct{}{
 	"read_files":                             {},
 	"grep":                                   {},
 	"file_glob":                              {},
@@ -678,7 +678,7 @@ code{
         <div id="status-issues" class="status-list">%s</div>
       </div>
       <div class="footer">
-        If WarpLocal is helpful, please <a href="https://github.com/sasuke39/openWarpAdapter" target="_blank" rel="noreferrer">star the project on GitHub</a>. That little nudge helps us keep polishing the settings experience and add more tools beyond the current coding MVP.
+        If WarpLocal is helpful, please <a href="https://github.com/sasuke39/openWarpAdapter" target="_blank" rel="noreferrer">star the project on GitHub</a>. That little nudge helps us keep polishing the settings experience and add more coding tools.
       </div>
     </aside>
   </section>
@@ -977,10 +977,14 @@ func (s *Server) handleAgentRequest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[REQ] history now has %d messages, calling LLM", len(conv.history))
 
-	// Clean up any incomplete tool-call cycles in the history.
-	// This can happen if the server was restarted while waiting for
-	// tool results from the client.
-	conv.history = pruneIncompleteToolCalls(conv.history)
+	// Normalize only after this request's inputs are present. A just-emitted
+	// assistant tool_call is valid while we wait for the client to return the
+	// matching tool_result; pruning it before the result arrives causes the agent
+	// to forget completed tools and repeat the same command forever.
+	if normalized, changed := normalizeConversationHistory(conv.history); changed {
+		log.Printf("[HISTORY] normalized conversation %s after appending request inputs: %d -> %d messages", convID, len(conv.history), len(normalized))
+		conv.history = normalized
+	}
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -1564,7 +1568,7 @@ func (s *Server) runAgentLoop(ctx context.Context, w io.Writer, flusher http.Flu
 			for j, tc := range result.ToolCalls {
 				log.Printf("[LLM] loop=%d tool_call[%d] name=%s id=%s args=%s", i, j, tc.Name, tc.ID, string(tc.Args))
 			}
-			if err := validateMVPToolCalls(result.ToolCalls); err != nil {
+			if err := validateSupportedToolCalls(result.ToolCalls); err != nil {
 				log.Printf("[LLM] loop=%d unsupported tool call: %v", i, err)
 				s.sendFinishError(w, flusher, err.Error())
 				return
@@ -1729,10 +1733,10 @@ func (s *Server) sendIncrementalText(w io.Writer, flusher http.Flusher, taskID, 
 	})
 }
 
-func validateMVPToolCalls(toolCalls []llm.ToolCall) error {
+func validateSupportedToolCalls(toolCalls []llm.ToolCall) error {
 	for _, tc := range toolCalls {
-		if _, ok := supportedMVPTools[tc.Name]; !ok {
-			return fmt.Errorf("tool %s is not supported by local adapter MVP", tc.Name)
+		if _, ok := supportedTools[tc.Name]; !ok {
+			return fmt.Errorf("tool %s is not supported by this local adapter", tc.Name)
 		}
 	}
 	return nil
@@ -1957,7 +1961,7 @@ func (s *Server) sendToolCalls(w io.Writer, flusher http.Flusher, conv *Conversa
 				},
 			}
 		default:
-			return fmt.Errorf("tool %s is not supported by local adapter MVP", tc.Name)
+			return fmt.Errorf("tool %s is not supported by this local adapter", tc.Name)
 		}
 
 		msg := &pb.Message{
@@ -2063,32 +2067,115 @@ func (s *Server) sendEvent(w io.Writer, flusher http.Flusher, event *pb.Response
 	}
 }
 
-// pruneIncompleteToolCalls removes trailing assistant tool-call messages
-// that don't have matching tool result messages following them. This can
-// happen if the server was restarted while waiting for tool results from
-// the client — DeepSeek and other strict APIs reject malformed histories.
-func pruneIncompleteToolCalls(history []openai.ChatCompletionMessageParamUnion) []openai.ChatCompletionMessageParamUnion {
+// normalizeConversationHistory removes malformed tool-call history so strict
+// providers like DeepSeek never receive:
+// 1. assistant tool_calls messages without matching tool_result messages
+// 2. stray tool_result messages with no preceding assistant tool_calls
+//
+// This is the key recovery path for "interrupt A, then immediately do B":
+// once the previous tool round is abandoned, we must drop that incomplete
+// assistant/tool sequence before sending the next user query upstream.
+func normalizeConversationHistory(history []openai.ChatCompletionMessageParamUnion) ([]openai.ChatCompletionMessageParamUnion, bool) {
 	if len(history) == 0 {
-		return history
+		return history, false
 	}
-	// Walk backwards and remove leading assistant tool_calls that have no
-	// following tool messages.
-	for len(history) > 0 {
-		last := history[len(history)-1]
-		// Only assistant messages can have tool_calls.
-		if last.OfAssistant == nil {
-			break
-		}
-		// If the last message has tool_calls, it must be followed by tool
-		// messages — but it's the last message, so there are none.
-		if len(last.OfAssistant.ToolCalls) > 0 {
-			log.Printf("[HISTORY] pruning dangling assistant tool_calls message (%d tool calls)", len(last.OfAssistant.ToolCalls))
-			history = history[:len(history)-1]
+
+	normalized := make([]openai.ChatCompletionMessageParamUnion, 0, len(history))
+	changed := false
+
+	for i := 0; i < len(history); i++ {
+		msg := history[i]
+
+		if msg.OfTool != nil {
+			log.Printf("[HISTORY] pruning stray tool_result message tool_call_id=%q", msg.OfTool.ToolCallID)
+			changed = true
 			continue
 		}
-		break
+
+		if toolCallIDs, ok := assistantToolCallIDs(msg); ok {
+			expected := make(map[string]struct{}, len(toolCallIDs))
+			malformedToolCallIDs := false
+			for _, id := range toolCallIDs {
+				if id == "" {
+					malformedToolCallIDs = true
+					continue
+				}
+				expected[id] = struct{}{}
+			}
+
+			j := i + 1
+			toolMsgs := make([]openai.ChatCompletionMessageParamUnion, 0)
+			matched := make(map[string]struct{}, len(expected))
+			for j < len(history) && history[j].OfTool != nil {
+				toolMsg := history[j]
+				toolMsgs = append(toolMsgs, toolMsg)
+				if _, ok := expected[toolMsg.OfTool.ToolCallID]; ok {
+					matched[toolMsg.OfTool.ToolCallID] = struct{}{}
+				}
+				j++
+			}
+
+			if malformedToolCallIDs || len(expected) == 0 || len(matched) != len(expected) {
+				log.Printf(
+					"[HISTORY] pruning incomplete assistant tool_calls message expected=%d matched=%d trailing_tool_results=%d malformed_ids=%v",
+					len(expected),
+					len(matched),
+					len(toolMsgs),
+					malformedToolCallIDs,
+				)
+				changed = true
+				i = j - 1
+				continue
+			}
+
+			normalized = append(normalized, msg)
+			normalized = append(normalized, toolMsgs...)
+			i = j - 1
+			continue
+		}
+
+		normalized = append(normalized, msg)
 	}
-	return history
+
+	return normalized, changed
+}
+
+func assistantToolCallIDs(msg openai.ChatCompletionMessageParamUnion) ([]string, bool) {
+	if msg.OfAssistant == nil {
+		return nil, false
+	}
+
+	if len(msg.OfAssistant.ToolCalls) > 0 {
+		ids := make([]string, 0, len(msg.OfAssistant.ToolCalls))
+		for _, tc := range msg.OfAssistant.ToolCalls {
+			ids = append(ids, tc.ID)
+		}
+		return ids, true
+	}
+
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return nil, false
+	}
+
+	var payload struct {
+		Role      string `json:"role"`
+		ToolCalls []struct {
+			ID string `json:"id"`
+		} `json:"tool_calls"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, false
+	}
+	if payload.Role != "assistant" || len(payload.ToolCalls) == 0 {
+		return nil, false
+	}
+
+	ids := make([]string, 0, len(payload.ToolCalls))
+	for _, tc := range payload.ToolCalls {
+		ids = append(ids, tc.ID)
+	}
+	return ids, true
 }
 
 var _ = json.RawMessage{}

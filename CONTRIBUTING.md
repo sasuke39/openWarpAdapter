@@ -24,12 +24,12 @@ go test ./...
 
 ## Scope
 
-This repository is intentionally scoped to a local Warp-compatible coding adapter MVP.
+This repository is intentionally scoped to a local Warp-compatible coding adapter.
 
 Good contributions:
 
 - improve the core coding loop
-- improve protocol compatibility for already-scoped MVP tools
+- improve protocol compatibility for supported tools
 - improve developer docs
 - improve failure reporting and debuggability
 

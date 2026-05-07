@@ -1,8 +1,7 @@
 diff --git a/crates/warp_core/src/channel/config.rs b/crates/warp_core/src/channel/config.rs
 --- a/crates/warp_core/src/channel/config.rs
 +++ b/crates/warp_core/src/channel/config.rs
-@@ -49,6 +49,15 @@ impl WarpServerConfig {
-             firebase_auth_api_key: "AIzaSyBdy3O3S9hrdayLJxJ7mriBR4qgUaUygAs".into(),
+@@ -50,5 +50,14 @@ impl WarpServerConfig {
          }
      }
 +

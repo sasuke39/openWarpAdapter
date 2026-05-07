@@ -394,24 +394,25 @@ func IsToolCallFinish(chunks []openai.ChatCompletionChunk) bool {
 }
 
 func ExtractToolCalls(chunks []openai.ChatCompletionChunk) []ToolCall {
-	calls := map[int]*ToolCall{}
-	order := []int{}
+	calls := map[int64]*ToolCall{}
+	order := []int64{}
 
 	for _, chunk := range chunks {
 		for _, choice := range chunk.Choices {
-			for i, tc := range choice.Delta.ToolCalls {
-				if _, ok := calls[i]; !ok {
-					calls[i] = &ToolCall{}
-					order = append(order, i)
+			for _, tc := range choice.Delta.ToolCalls {
+				idx := tc.Index
+				if _, ok := calls[idx]; !ok {
+					calls[idx] = &ToolCall{}
+					order = append(order, idx)
 				}
 				if tc.ID != "" {
-					calls[i].ID = tc.ID
+					calls[idx].ID = tc.ID
 				}
 				if tc.Function.Name != "" {
-					calls[i].Name = tc.Function.Name
+					calls[idx].Name = tc.Function.Name
 				}
 				if tc.Function.Arguments != "" {
-					calls[i].Args = append(calls[i].Args, tc.Function.Arguments...)
+					calls[idx].Args = append(calls[idx].Args, tc.Function.Arguments...)
 				}
 			}
 		}
