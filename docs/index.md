@@ -17,7 +17,7 @@ features:
   - title: Local by design
     details: WarpLocal routes AI requests to a Go helper running on your machine instead of the official Warp cloud backend.
   - title: Bring your own provider
-    details: Configure any OpenAI-compatible endpoint, API key, and model from the local web settings page.
+    details: Configure any OpenAI-compatible endpoint, API key, and model from the WarpLocal settings menu.
   - title: Coding-agent workflow
     details: Supports core tools for reading files, searching code, running shell commands, applying file diffs, and collecting command output.
   - title: Works beside official Warp

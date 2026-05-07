@@ -17,7 +17,7 @@ features:
   - title: 本地优先
     details: WarpLocal 会把 AI 请求路由到本机 Go 辅助服务，而不是官方 Warp 云端后端。
   - title: 自定义模型服务
-    details: 通过本地网页设置页配置服务商、接口地址、接口密钥和模型。
+    details: 通过 WarpLocal 设置菜单配置服务商、接口地址、接口密钥和模型。
   - title: 面向编码工作流
     details: 已支持读文件、搜代码、运行命令、读取长命令输出、应用文件改动等核心工具。
   - title: 可与官方 Warp 并存

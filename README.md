@@ -10,7 +10,7 @@ Documentation: [https://sasuke39.github.io/open-warp/](https://sasuke39.github.i
 
 - Works with any OpenAI-compatible endpoint, including OpenAI, DeepSeek, Ollama, OpenRouter, vLLM, and LM Studio
 - Drop-in `WarpLocal.app`: double-click to launch, no command line required
-- Web settings UI at `http://127.0.0.1:18888/settings`
+- Built-in local settings UI for provider, API key, and model configuration
 - CJK input support: Chinese, Japanese, and Korean text is recognized as AI queries
 - Coexists with the official Warp app
 
@@ -52,12 +52,24 @@ open ./WarpLocal.app
 
 See **[WARP_CLIENT.md](./WARP_CLIENT.md)** for the full patch and build guide.
 
-## Quick Start
+## How to Use
 
-1. Launch `WarpLocal.app`.
-2. Open settings from the app menu entry "Local Adapter Settings...", or visit [http://127.0.0.1:18888/settings](http://127.0.0.1:18888/settings).
-3. Configure your provider, API key, and model.
-4. Press `Cmd+K` in WarpLocal and start working with your LLM.
+1. Download and open `WarpLocal.app`.
+2. In the app menu, choose `Local Adapter Settings...`.
+3. Select your provider and fill in the base URL, API key, and model name.
+4. Save the settings. The local adapter reloads automatically.
+5. Go back to WarpLocal, press `Cmd+K`, and ask the terminal to help.
+
+Example prompts:
+
+```text
+Analyze this directory.
+Explain this error and suggest a fix.
+Create a simple text file.
+Find the server entry point and summarize how it works.
+```
+
+`WarpLocal.app` starts the local adapter helper for you. You do not need to run a separate server for normal use.
 
 ## Configuration
 
@@ -73,7 +85,7 @@ server:
   port: 18888
 ```
 
-You can also configure everything through the web settings UI — no manual YAML editing required.
+For normal use, configure everything from `Local Adapter Settings...`. The YAML file is mainly useful for debugging or automation.
 
 ## Repository Layout
 

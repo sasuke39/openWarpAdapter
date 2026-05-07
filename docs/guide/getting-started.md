@@ -24,13 +24,9 @@ sh ./install.sh
 
 ## Configure your provider
 
-Open the local settings page:
+Open `WarpLocal.app`, then choose `Local Adapter Settings...` from the app menu.
 
-```text
-http://127.0.0.1:18888/settings
-```
-
-Fill in:
+Fill in the fields shown in the settings window:
 
 - provider name
 - base URL
@@ -38,6 +34,8 @@ Fill in:
 - model name
 
 Then click save. The adapter reloads the configuration without a full app restart.
+
+The local HTTP settings URL is still available for debugging, but normal users do not need to open it manually.
 
 ## Start using AI in WarpLocal
 
