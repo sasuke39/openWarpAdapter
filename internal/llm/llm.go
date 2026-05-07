@@ -10,7 +10,7 @@ import (
 	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/packages/ssestream"
 	"github.com/openai/openai-go/shared"
-	"github.com/sasuke39/openWarpAdapter/internal/config"
+	"github.com/sasuke39/open-warp/internal/config"
 )
 
 type ToolCall struct {

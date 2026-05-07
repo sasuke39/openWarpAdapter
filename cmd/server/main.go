@@ -21,12 +21,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sasuke39/openWarpAdapter/internal/agent"
-	"github.com/sasuke39/openWarpAdapter/internal/config"
-	"github.com/sasuke39/openWarpAdapter/internal/llm"
+	"github.com/sasuke39/open-warp/internal/agent"
+	"github.com/sasuke39/open-warp/internal/config"
+	"github.com/sasuke39/open-warp/internal/llm"
 
 	"github.com/openai/openai-go"
-	pb "github.com/sasuke39/openWarpAdapter/internal/proto"
+	pb "github.com/sasuke39/open-warp/internal/proto"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -605,7 +605,7 @@ code{
       </div>
       <div class="meta-chip">
         <strong>Project</strong>
-        <span><a href="https://github.com/sasuke39/openWarpAdapter" target="_blank" rel="noreferrer">sasuke39/openWarpAdapter</a></span>
+        <span><a href="https://github.com/sasuke39/open-warp" target="_blank" rel="noreferrer">sasuke39/open-warp</a></span>
       </div>
     </div>
   </section>
@@ -678,7 +678,7 @@ code{
         <div id="status-issues" class="status-list">%s</div>
       </div>
       <div class="footer">
-        If WarpLocal is helpful, please <a href="https://github.com/sasuke39/openWarpAdapter" target="_blank" rel="noreferrer">star the project on GitHub</a>. That little nudge helps us keep polishing the settings experience and add more coding tools.
+        If WarpLocal is helpful, please <a href="https://github.com/sasuke39/open-warp" target="_blank" rel="noreferrer">star the project on GitHub</a>. That little nudge helps us keep polishing the settings experience and add more coding tools.
       </div>
     </aside>
   </section>

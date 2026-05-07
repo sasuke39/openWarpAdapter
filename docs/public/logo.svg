@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="open-warp logo">
+  <rect width="64" height="64" rx="14" fill="#111827"/>
+  <path d="M16 20h21c7 0 12 5 12 12s-5 12-12 12H16V20Z" fill="#38bdf8"/>
+  <path d="M24 28h12c3 0 5 2 5 4s-2 4-5 4H24v-8Z" fill="#111827"/>
+  <path d="M15 50h34" stroke="#a78bfa" stroke-width="5" stroke-linecap="round"/>
+</svg>

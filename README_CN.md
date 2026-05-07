@@ -1,8 +1,10 @@
-# WarpLocal
+# open-warp
 
-在 Warp 里使用你自己的大语言模型。这个本地开源适配器可以让打过补丁的 Warp 终端连接任意 OpenAI 兼容接口，包括 OpenAI、DeepSeek、Ollama、OpenRouter、LM Studio、vLLM 等。
+在 Warp 里使用你自己的大语言模型。`open-warp` 是一个本地开源适配器，可以让打过补丁的 Warp 终端连接任意 OpenAI 兼容接口，包括 OpenAI、DeepSeek、Ollama、OpenRouter、LM Studio、vLLM 等。
 
 **工作原理：** WarpLocal 对 Warp 客户端打补丁，将 AI 请求路由到本地 Go 服务，而不是 Warp 云端。这个本地服务会把 Warp 的 protobuf 协议转换成 OpenAI 兼容接口请求，执行已支持的本地工具，并把结果流式返回给客户端。
+
+文档站：[https://sasuke39.github.io/open-warp/zh/](https://sasuke39.github.io/open-warp/zh/)
 
 ## 特性
 
@@ -26,7 +28,7 @@
 sh ./install.sh
 ```
 
-从 [GitHub 发布页](https://github.com/sasuke39/openWarpAdapter/releases) 下载最新的 `WarpLocal.app` 并安装。
+从 [GitHub 发布页](https://github.com/sasuke39/open-warp/releases) 下载最新的 `WarpLocal.app` 并安装。
 
 > **macOS 提示应用已损坏？** 从浏览器直接下载的未签名应用可能会被系统拦截。运行以下命令清除隔离标记即可：
 > ```bash
@@ -40,8 +42,8 @@ sh ./install.sh
 
 ```bash
 # 1. 克隆本仓库
-git clone https://github.com/sasuke39/openWarpAdapter.git
-cd openWarpAdapter
+git clone https://github.com/sasuke39/open-warp.git
+cd open-warp
 
 # 2. 构建 WarpLocal.app
 WARP_SRC=/path/to/warp-source sh ./build_and_bundle.sh
@@ -136,7 +138,7 @@ gofmt -w ./cmd ./internal
 
 ## 收藏趋势
 
-[![收藏趋势图](https://api.star-history.com/svg?repos=sasuke39/openWarpAdapter&type=Date)](https://star-history.com/#sasuke39/openWarpAdapter&Date)
+[![收藏趋势图](https://api.star-history.com/svg?repos=sasuke39/open-warp&type=Date)](https://star-history.com/#sasuke39/open-warp&Date)
 
 ## 开源协议
 

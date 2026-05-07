@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-REPO="https://github.com/sasuke39/openWarpAdapter"
+REPO="https://github.com/sasuke39/open-warp"
 INSTALL_DIR="/Applications"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

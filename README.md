@@ -1,8 +1,10 @@
-# WarpLocal
+# open-warp
 
-Run your own LLM inside Warp. A local, open-source adapter that connects a patched Warp terminal to any OpenAI-compatible provider, including OpenAI, DeepSeek, Ollama, OpenRouter, LM Studio, vLLM, and more.
+Run your own LLM inside Warp. `open-warp` is a local, open-source adapter that connects a patched Warp terminal to any OpenAI-compatible provider, including OpenAI, DeepSeek, Ollama, OpenRouter, LM Studio, vLLM, and more.
 
 **How it works:** WarpLocal patches the Warp client to route AI requests to a local Go server instead of Warp's cloud backend. The server translates Warp's protobuf protocol into OpenAI-compatible API calls, executes supported local tools, and streams responses back to the client.
+
+Documentation: [https://sasuke39.github.io/open-warp/](https://sasuke39.github.io/open-warp/)
 
 ## Features
 
@@ -26,7 +28,7 @@ Not yet supported: MCP tools, subagents, computer use, passive suggestions.
 sh ./install.sh
 ```
 
-Downloads the latest `WarpLocal.app` from [GitHub Releases](https://github.com/sasuke39/openWarpAdapter/releases) and installs it.
+Downloads the latest `WarpLocal.app` from [GitHub Releases](https://github.com/sasuke39/open-warp/releases) and installs it.
 
 > **macOS says the app is damaged?** Browser-downloaded unsigned apps can be blocked by Gatekeeper. Clear the quarantine attribute with:
 > ```bash
@@ -40,8 +42,8 @@ Prerequisites: Go 1.22+, Rust toolchain, [Warp source](https://github.com/nicohm
 
 ```bash
 # 1. Clone this repo
-git clone https://github.com/sasuke39/openWarpAdapter.git
-cd openWarpAdapter
+git clone https://github.com/sasuke39/open-warp.git
+cd open-warp
 
 # 2. Build the WarpLocal app bundle
 WARP_SRC=/path/to/warp-source sh ./build_and_bundle.sh
@@ -136,7 +138,7 @@ gofmt -w ./cmd ./internal
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=sasuke39/openWarpAdapter&type=Date)](https://star-history.com/#sasuke39/openWarpAdapter&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=sasuke39/open-warp&type=Date)](https://star-history.com/#sasuke39/open-warp&Date)
 
 ## License
 

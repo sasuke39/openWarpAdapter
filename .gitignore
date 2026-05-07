@@ -14,6 +14,9 @@ conversations.json
 /release/
 bin/
 dist/
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
 
 # Go
 coverage.out

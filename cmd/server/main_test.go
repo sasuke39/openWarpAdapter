@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/sasuke39/openWarpAdapter/internal/llm"
+	"github.com/sasuke39/open-warp/internal/llm"
 
 	"github.com/openai/openai-go"
 )

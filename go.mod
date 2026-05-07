@@ -1,4 +1,4 @@
-module github.com/sasuke39/openWarpAdapter
+module github.com/sasuke39/open-warp
 
 go 1.26.1
 
