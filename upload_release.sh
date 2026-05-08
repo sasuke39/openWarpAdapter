@@ -87,7 +87,7 @@ echo ""
 # ─── Confirm ──
 
 read -rp "Upload release $TAG? [Y/n] " confirm
-if [[ "${confirm,,}" == "n" ]]; then
+if [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" == "n" ]]; then
     info "Aborted."
     exit 0
 fi
