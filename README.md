@@ -52,6 +52,22 @@ open ./WarpLocal.app
 
 See **[WARP_CLIENT.md](./WARP_CLIENT.md)** for the full patch and build guide.
 
+## Troubleshooting
+
+If WarpLocal crashes or behaves unexpectedly, generate diagnostics:
+
+```bash
+# If you have the repo:
+sh ./install.sh doctor
+
+# If you only have the app:
+bash <(curl -fsSL https://raw.githubusercontent.com/sasuke39/open-warp/main/diagnostics.sh)
+```
+
+Then open a [bug report](https://github.com/sasuke39/open-warp/issues/new?template=bug_report.yml) and paste the generated summary.
+
+See **[Troubleshooting](./docs/guide/troubleshooting.md)** for more help.
+
 ## How to Use
 
 1. Download and open `WarpLocal.app`.

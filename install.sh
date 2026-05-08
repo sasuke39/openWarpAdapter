@@ -1,9 +1,10 @@
 #!/bin/bash
-# WarpLocal Installer
+# WarpLocal Installer & Diagnostics
 #
-# Two installation paths:
+# Usage:
 #   ./install.sh                    — Download pre-built WarpLocal.app
 #   ./install.sh --build            — Build from source (requires Rust + Go)
+#   ./install.sh doctor             — Generate diagnostics for bug reports
 #
 # Options:
 #   --build          Build from source instead of downloading
@@ -127,19 +128,39 @@ install_build() {
     fi
 }
 
+# ─── Diagnostics (doctor) ─────────────────────────────────────────────────────
+
+run_doctor() {
+    local diag_script="$SCRIPT_DIR/diagnostics.sh"
+    if [[ -f "$diag_script" ]]; then
+        bash "$diag_script"
+    else
+        # Fallback: download and run from GitHub
+        info "diagnostics.sh not found locally, downloading..."
+        bash <(curl -fsSL https://raw.githubusercontent.com/sasuke39/open-warp/main/diagnostics.sh)
+    fi
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 LAUNCH=false
 BUILD=false
+DOCTOR=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --build)    BUILD=true; shift ;;
         --launch)   LAUNCH=true; shift ;;
         --warp-src) shift 2 ;; # handled in install_build
+        doctor)     DOCTOR=true; shift ;;
         *)          shift ;;
     esac
 done
+
+if $DOCTOR; then
+    run_doctor
+    exit 0
+fi
 
 info "WarpLocal Installer"
 echo ""

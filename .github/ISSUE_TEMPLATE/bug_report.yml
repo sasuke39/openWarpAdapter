@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a WarpLocal bug or crash
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Problem category
+      description: What area does this issue belong to?
+      options:
+        - crash
+        - install
+        - config
+        - provider
+        - tooling
+        - docs
+        - unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem in one or two sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open WarpLocal.app
+        2. Press Cmd+K
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics summary
+      description: |
+        Run `sh install.sh doctor` and paste the generated `issue-summary.md` here.
+        If you cannot run the doctor command, provide your macOS version, WarpLocal version, and install method.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or crash report
+      description: |
+        Paste the redacted log tail or crash report from the diagnostics folder.
+        Do NOT paste API keys, tokens, or passwords.
+      render: shell
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I have reviewed the diagnostics and removed any secrets.
+          required: true

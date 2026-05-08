@@ -71,6 +71,10 @@ chmod +x "$BUNDLE_DIR/Contents/Helpers/warp-local-adapter"
 # Copy example config
 cp "$SCRIPT_DIR/config.example.yaml" "$BUNDLE_DIR/Contents/Resources/config.example.yaml"
 
+# Copy diagnostics script
+cp "$SCRIPT_DIR/diagnostics.sh" "$BUNDLE_DIR/Contents/Resources/diagnostics.sh"
+chmod +x "$BUNDLE_DIR/Contents/Resources/diagnostics.sh"
+
 # Copy icon if present
 ICON_DEST="$BUNDLE_DIR/Contents/Resources/iconfile.icns"
 if [[ -f "$ASSETS_DIR/iconfile.icns" ]]; then
